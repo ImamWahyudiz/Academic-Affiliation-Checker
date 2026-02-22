@@ -235,6 +235,155 @@ def verify_author_name(
     
     return last_name_match and first_name_match
 
+
+def verify_institution_match(
+    expected_institution: str,
+    author_data: Dict
+) -> Tuple[bool, float]:
+    """
+    Verify that the author's institution history contains the expected institution.
+    
+    This helps distinguish between different people with the same name
+    by checking if their institution matches the input data.
+    
+    Args:
+        expected_institution: Institution name from input data
+        author_data: Author profile from OpenAlex
+        
+    Returns:
+        Tuple of (is_match, confidence_score)
+        - is_match: True if institution found in history
+        - confidence_score: 0.0-1.0 indicating match quality
+    """
+    if not expected_institution or not author_data:
+        return True, 0.0  # No institution to verify, allow pass
+    
+    import re
+    
+    def normalize_inst(name: str) -> str:
+        """Normalize institution name for comparison."""
+        if not name:
+            return ""
+        # Lowercase, remove punctuation
+        name = re.sub(r'[^\w\s]', '', name.lower().strip())
+        # Remove common words that don't help matching
+        remove_words = ['university', 'of', 'the', 'institute', 'college', 
+                       'school', 'department', 'faculty', 'center', 'centre',
+                       'national', 'state', 'technical', 'technology']
+        words = name.split()
+        filtered = [w for w in words if w not in remove_words and len(w) > 2]
+        return ' '.join(filtered) if filtered else name
+    
+    def get_key_words(name: str) -> set:
+        """Extract key identifying words from institution name."""
+        normalized = normalize_inst(name)
+        return set(normalized.split())
+    
+    expected_normalized = normalize_inst(expected_institution)
+    expected_keywords = get_key_words(expected_institution)
+    
+    if not expected_keywords:
+        return True, 0.0  # No meaningful keywords to check
+    
+    # Collect all institution names from author's history
+    author_institutions = set()
+    
+    # From affiliations
+    affiliations = author_data.get("affiliations") or []
+    for aff in affiliations:
+        inst = aff.get("institution") or {}
+        inst_name = inst.get("display_name", "")
+        if inst_name:
+            author_institutions.add(inst_name)
+    
+    # From last_known_institutions
+    last_insts = author_data.get("last_known_institutions") or []
+    for inst in last_insts:
+        if inst:
+            inst_name = inst.get("display_name", "")
+            if inst_name:
+                author_institutions.add(inst_name)
+    
+    # Check for matches
+    best_score = 0.0
+    
+    for inst_name in author_institutions:
+        inst_normalized = normalize_inst(inst_name)
+        inst_keywords = get_key_words(inst_name)
+        
+        # Check exact normalized match
+        if expected_normalized == inst_normalized:
+            return True, 1.0
+        
+        # Check if expected is contained in author's institution or vice versa
+        if expected_normalized in inst_normalized or inst_normalized in expected_normalized:
+            best_score = max(best_score, 0.9)
+            continue
+        
+        # Check keyword overlap (Jaccard similarity)
+        if expected_keywords and inst_keywords:
+            intersection = expected_keywords & inst_keywords
+            union = expected_keywords | inst_keywords
+            if union:
+                jaccard = len(intersection) / len(union)
+                if jaccard > 0.3:  # At least 30% overlap
+                    best_score = max(best_score, jaccard)
+    
+    return best_score >= 0.3, best_score
+
+
+def verify_author_identity(
+    expected_first: str,
+    expected_last: str,
+    expected_institution: str,
+    author_data: Dict
+) -> Tuple[bool, str]:
+    """
+    Comprehensive author identity verification using name AND institution.
+    
+    Args:
+        expected_first: Expected first name
+        expected_last: Expected last name
+        expected_institution: Expected current institution
+        author_data: Author profile from OpenAlex
+        
+    Returns:
+        Tuple of (is_verified, reason)
+    """
+    if not author_data:
+        return False, "No author data"
+    
+    actual_name = author_data.get("display_name", "")
+    
+    # Step 1: Check name match
+    name_match = verify_author_name(expected_first, expected_last, actual_name)
+    
+    # Step 2: Check institution match
+    inst_match, inst_score = verify_institution_match(expected_institution, author_data)
+    
+    # Decision logic:
+    # 1. Name matches + Institution matches → VERIFIED
+    # 2. Name matches + No institution data → VERIFIED (trust name)
+    # 3. Name matches + Institution doesn't match → WARNING but allow (might be old data)
+    # 4. Name doesn't match + Institution matches → REJECT (different person)
+    # 5. Name doesn't match + Institution doesn't match → REJECT
+    
+    if name_match:
+        if inst_match:
+            return True, f"Name and institution verified (score: {inst_score:.2f})"
+        elif not expected_institution:
+            return True, "Name verified (no institution to check)"
+        else:
+            # Name matches but institution doesn't - allow with warning
+            return True, f"Name verified, institution not found in history (may be outdated)"
+    else:
+        if inst_match and inst_score >= 0.7:
+            # Different name but strong institution match - might still be wrong person
+            return False, f"Name mismatch (expected: '{expected_first} {expected_last}', got: '{actual_name}')"
+        else:
+            return False, f"Name mismatch (expected: '{expected_first} {expected_last}', got: '{actual_name}')"
+
+
 def interactive_country_selection() -> List[str]:
     """
     Display interactive menu for country selection.
@@ -653,6 +802,7 @@ def process_candidate(
     first_name = str(row.get("First Name", "")).strip()
     last_name = str(row.get("Last Name", "")).strip()
     openalex_id = str(row.get("OpenAlex_ID", "")).strip()
+    current_institution = str(row.get("Current Institution", "")).strip()
     
     flagged_countries = config["flagged_countries"]
     max_works = config["max_works_to_check"]
@@ -661,6 +811,8 @@ def process_candidate(
     progress = display_num if display_num > 0 else index + 1
     print(f"\n[{progress}/{total_rows}] Checking: {first_name} {last_name}")
     print(f"    OpenAlex ID: {openalex_id}")
+    if current_institution:
+        print(f"    Institution: {current_institution}")
     
     # Initialize results
     flag_result = "No"
@@ -668,21 +820,28 @@ def process_candidate(
     flag_evidence = ""
     
     # ========================================================================
-    # STEP 0: Verify Author Name Match
+    # STEP 0: Verify Author Identity (Name + Institution)
     # ========================================================================
     author_data = get_author_profile(openalex_id, headers)
     time.sleep(api_delay)
     
     if author_data:
         actual_name = author_data.get("display_name", "")
-        if not verify_author_name(first_name, last_name, actual_name):
-            print(f"    [WARNING] Name mismatch! Expected: '{first_name} {last_name}', Got: '{actual_name}'")
+        
+        # Use comprehensive identity verification
+        is_verified, verify_reason = verify_author_identity(
+            first_name, last_name, current_institution, author_data
+        )
+        
+        if not is_verified:
+            print(f"    [WARNING] {verify_reason}")
             print(f"    [SKIP] Skipping affiliation check due to potential ID mismatch")
             df.at[index, "Flag"] = "No"
             df.at[index, "Affiliation_Type"] = "None"
             df.at[index, "Flag_Evidence"] = f"ID Mismatch: OpenAlex shows '{actual_name}'"
             return False
-        print(f"    OpenAlex Name: {actual_name} [VERIFIED]")
+        
+        print(f"    OpenAlex Name: {actual_name} [{verify_reason}]")
     
     # ========================================================================
     # STEP 1: Direct Affiliation Check

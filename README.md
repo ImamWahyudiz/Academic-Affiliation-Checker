@@ -197,6 +197,24 @@ When a mismatch is detected, the output shows:
 
 The flag evidence column will show: `ID Mismatch: OpenAlex shows 'Hualiang Jiang'`
 
+### Institution Verification
+
+When your input data includes a **"Current Institution"** column, the system performs additional verification:
+
+1. **Name + Institution Match**: Both name AND institution must be found in OpenAlex history → High confidence
+2. **Name Match Only**: Name matches but institution not found → Allowed with warning (data might be outdated)
+3. **Name Mismatch**: Different name even if institution matches → Rejected (different person)
+
+This helps distinguish between multiple people with similar names:
+
+| Input | OpenAlex Shows | Institution Check | Result |
+|-------|----------------|-------------------|--------|
+| Liang Jiang @ U. Chicago | Hualiang Jiang | No match | ❌ REJECTED |
+| John Smith @ MIT | John Smith | MIT found in history | ✅ VERIFIED |
+| Robert Wille @ TU Munich | Robert Wille | TUM found in history | ✅ VERIFIED |
+
+**Note**: Institution matching uses keyword comparison, so variations like "Technical University of Munich" and "TU München" are treated as matches.
+
 ## Examples
 
 ### Interactive country selection
