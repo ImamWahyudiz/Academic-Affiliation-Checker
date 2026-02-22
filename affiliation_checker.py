@@ -76,6 +76,46 @@ COUNTRY_NAMES = {
     "PK": "Pakistan",
 }
 
+# ============================================================================
+# GENERIC INSTITUTION BLACKLIST
+# ============================================================================
+# OpenAlex sometimes incorrectly tags generic institution names (like "Ministry
+# of Education") with wrong country codes. These patterns are excluded from
+# affiliation checks to prevent false positives.
+
+GENERIC_INSTITUTION_PATTERNS = [
+    "ministry of education",
+    "ministry of science",
+    "ministry of health",
+    "ministry of",
+    "department of education",
+    "national science foundation",
+    "government of",
+    "state council",
+]
+
+
+def is_generic_institution(institution_name: str) -> bool:
+    """
+    Check if an institution name is too generic and should be excluded.
+    
+    Args:
+        institution_name: Name of the institution
+        
+    Returns:
+        True if institution should be excluded (generic), False otherwise
+    """
+    if not institution_name:
+        return False
+    
+    name_lower = institution_name.lower().strip()
+    
+    for pattern in GENERIC_INSTITUTION_PATTERNS:
+        if pattern in name_lower:
+            return True
+    
+    return False
+
 def interactive_country_selection() -> List[str]:
     """
     Display interactive menu for country selection.
@@ -335,9 +375,13 @@ def check_direct_affiliation(
             continue
             
         country_code = institution.get("country_code")
+        inst_name = institution.get("display_name", "Unknown Institution")
+        
+        # Skip generic institutions that may have incorrect country codes
+        if is_generic_institution(inst_name):
+            continue
         
         if country_code and country_code in flagged_countries:
-            inst_name = institution.get("display_name", "Unknown Institution")
             years = aff.get("years") or []
             
             if years and isinstance(years, list) and len(years) > 0:
@@ -354,9 +398,14 @@ def check_direct_affiliation(
         if not isinstance(inst, dict):
             continue
             
+        inst_name = inst.get("display_name", "Unknown Institution")
+        
+        # Skip generic institutions
+        if is_generic_institution(inst_name):
+            continue
+            
         country_code = inst.get("country_code")
         if country_code and country_code in flagged_countries:
-            inst_name = inst.get("display_name", "Unknown Institution")
             country_name = get_country_name(country_code)
             ev = f"{inst_name} [{country_name}] (Last Known)"
             if ev not in evidence:
@@ -365,13 +414,16 @@ def check_direct_affiliation(
     # Fallback: check last_known_institution (singular/legacy field)
     last_inst = author_data.get("last_known_institution")
     if last_inst and isinstance(last_inst, dict):
-        country_code = last_inst.get("country_code")
-        if country_code and country_code in flagged_countries:
-            inst_name = last_inst.get("display_name", "Unknown Institution")
-            country_name = get_country_name(country_code)
-            ev = f"{inst_name} [{country_name}] (Last Known)"
-            if ev not in evidence:
-                evidence.append(ev)
+        inst_name = last_inst.get("display_name", "Unknown Institution")
+        
+        # Skip generic institutions
+        if not is_generic_institution(inst_name):
+            country_code = last_inst.get("country_code")
+            if country_code and country_code in flagged_countries:
+                country_name = get_country_name(country_code)
+                ev = f"{inst_name} [{country_name}] (Last Known)"
+                if ev not in evidence:
+                    evidence.append(ev)
     
     return len(evidence) > 0, evidence
 
@@ -432,12 +484,16 @@ def check_indirect_affiliation(
                     
                 country_code = inst.get("country_code")
                 inst_id = inst.get("id", "")
+                inst_name = inst.get("display_name", "Unknown Institution")
+                
+                # Skip generic institutions that may have incorrect country codes
+                if is_generic_institution(inst_name):
+                    continue
                 
                 if country_code and country_code in flagged_countries:
                     if inst_id and inst_id not in checked_institutions:
                         checked_institutions.add(inst_id)
                         
-                        inst_name = inst.get("display_name", "Unknown Institution")
                         coauthor_name = author.get("display_name", "Unknown Co-author")
                         country_name = get_country_name(country_code)
                         

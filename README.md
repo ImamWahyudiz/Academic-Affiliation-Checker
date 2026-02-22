@@ -10,6 +10,7 @@ A Python tool for checking academic researchers' affiliations with specified cou
 
 - **Direct Affiliation Check**: Checks author's employment/affiliation history
 - **Indirect Affiliation Check**: Checks co-authors' institutions from recent publications
+- **False Positive Prevention**: Filters out generic institution names that often have incorrect country tags
 - **Interactive Mode**: Select countries to check via menu
 - **Flexible Configuration**: Command line arguments for all options
 - **Detailed Evidence**: Shows institution names, years, and co-author details
@@ -157,6 +158,25 @@ Output is saved as **Excel (.xlsx)** with:
     [FLAG] INDIRECT affiliation found through co-authors!
            - Co-author: Jane Smith at Tel Aviv University [Israel] (2024)
 ```
+
+## False Positive Prevention
+
+OpenAlex API sometimes returns incorrect country codes for generic institutions. For example, "Ministry of Education" exists in many countries, but may be incorrectly tagged with a specific country code.
+
+To prevent false positives, the following institution name patterns are automatically **excluded** from checks:
+
+| Pattern | Reason |
+|---------|--------|
+| Ministry of Education | Exists in many countries, often incorrectly tagged |
+| Ministry of Science | Generic governmental body |
+| Ministry of Health | Generic governmental body |
+| Ministry of... | Any ministry-related institution |
+| Department of Education | Generic governmental body |
+| National Science Foundation | May have incorrect country tags |
+| Government of... | Generic governmental reference |
+| State Council | Generic governmental body |
+
+This filter significantly reduces false positives while maintaining accuracy for legitimate academic institutions.
 
 ## Examples
 
