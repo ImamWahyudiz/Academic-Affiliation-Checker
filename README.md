@@ -39,6 +39,7 @@ pip install -r requirements.txt
 ```
 pandas>=1.5.0
 requests>=2.28.0
+openpyxl>=3.0.0
 ```
 
 ## How It Works
@@ -129,7 +130,14 @@ First Name,Last Name,OpenAlex_ID
 
 If `OpenAlex_ID` is missing, the program will automatically search for authors.
 
-## Output Columns
+## Output Format
+
+Output is saved as **Excel (.xlsx)** with:
+- **Yellow highlighting** for flagged rows
+- Frozen header row
+- Auto-adjusted column widths
+
+### Output Columns
 
 | Column | Description |
 |--------|-------------|

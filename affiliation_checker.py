@@ -16,6 +16,14 @@ import argparse
 import sys
 from typing import List, Dict, Tuple, Optional
 
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment
+    from openpyxl.utils.dataframe import dataframe_to_rows
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
+
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -117,6 +125,71 @@ def interactive_country_selection() -> List[str]:
             return valid_codes
         else:
             print("[!] Tidak ada kode valid. Coba lagi.")
+
+
+def save_to_excel_with_highlight(df: pd.DataFrame, output_path: str) -> None:
+    """
+    Save DataFrame to Excel with yellow highlighting for flagged rows.
+    
+    Args:
+        df: DataFrame to save
+        output_path: Output file path (.xlsx)
+    """
+    if not OPENPYXL_AVAILABLE:
+        raise ImportError("openpyxl not installed. Run: pip install openpyxl")
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Results"
+    
+    # Define styles
+    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    
+    # Write headers
+    headers = list(df.columns)
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+    
+    # Find Flag column index
+    flag_col_idx = headers.index("Flag") + 1 if "Flag" in headers else None
+    
+    # Write data rows
+    for row_idx, (_, row) in enumerate(df.iterrows(), 2):
+        is_flagged = False
+        
+        for col_idx, value in enumerate(row, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            
+            # Check if this row is flagged
+            if col_idx == flag_col_idx and str(value).strip().lower() == "yes":
+                is_flagged = True
+        
+        # Apply yellow highlight to flagged rows
+        if is_flagged:
+            for col_idx in range(1, len(headers) + 1):
+                ws.cell(row=row_idx, column=col_idx).fill = yellow_fill
+    
+    # Auto-adjust column widths (approximate)
+    for col_idx, header in enumerate(headers, 1):
+        max_length = len(str(header))
+        for row in ws.iter_rows(min_row=2, max_row=min(100, len(df) + 1), min_col=col_idx, max_col=col_idx):
+            for cell in row:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, min(len(str(cell.value)), 50))
+                except:
+                    pass
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = max_length + 2
+    
+    # Freeze header row
+    ws.freeze_panes = "A2"
+    
+    wb.save(output_path)
 
 
 # OpenAlex API base URL
@@ -627,15 +700,31 @@ def run_background_check(config: Dict) -> None:
     
     # Save results
     output_file = config["output_file"]
+    
+    # Change extension to xlsx for Excel output
+    if output_file.endswith('.csv'):
+        xlsx_file = output_file.replace('.csv', '.xlsx')
+    else:
+        xlsx_file = output_file + '.xlsx'
+    
     print("\n" + "-" * 70)
-    print(f"[INFO] Saving results to: {output_file}")
+    print(f"[INFO] Saving results to: {xlsx_file}")
     
     try:
-        df.to_csv(output_file, index=False, encoding="utf-8-sig")
+        # Save to Excel with highlighting
+        save_to_excel_with_highlight(df, xlsx_file)
         print("[SUCCESS] File saved successfully!")
+        print(f"[INFO] Flagged rows are highlighted in YELLOW")
     except Exception as e:
-        print(f"[ERROR] Failed to save file: {e}")
-        return
+        print(f"[ERROR] Failed to save Excel: {e}")
+        # Fallback to CSV
+        print("[INFO] Falling back to CSV...")
+        try:
+            df.to_csv(output_file, index=False, encoding="utf-8-sig")
+            print(f"[SUCCESS] CSV saved: {output_file}")
+        except Exception as e2:
+            print(f"[ERROR] Failed to save CSV: {e2}")
+            return
     
     # Print summary
     print("\n" + "=" * 70)
