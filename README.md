@@ -65,6 +65,53 @@ The system performs a **2-step verification** for each candidate:
 - If any co-author is affiliated with flagged country → **FLAGGED as Indirect**
 - Evidence includes: co-author name, institution, country, publication year
 
+## ⚠️ Important: Manual Verification Required
+
+> **This tool is a screening aid, NOT a definitive assessment.**
+> 
+> **Always manually verify flagged results**, especially for **Direct affiliations**.
+
+### Why Manual Verification is Critical
+
+OpenAlex builds affiliation data from publication metadata, which can be **inaccurate or misleading**:
+
+| Scenario | What OpenAlex Shows | Reality |
+|----------|---------------------|---------|
+| Co-authored paper | Author affiliated with foreign institution for 1 year | Collaboration/visiting, not employment |
+| Dual affiliation paper | Multiple institution affiliations | Author only works at one, listed both on paper |
+| Data entry error | Wrong institution tagged | Publisher/metadata error |
+| Name collision | Mixed data from different people | Similar names merged incorrectly |
+
+### Real Example
+
+```
+Willy Susilo (University of Wollongong, Australia)
+├── OpenAlex shows: "Sharif University of Technology [Iran] (2014)"
+├── Reality: Likely a single collaborative paper, not employment
+└── Action needed: Verify if actual affiliation or just collaboration
+```
+
+### Verification Checklist
+
+When a candidate is flagged, verify manually:
+
+1. **For Direct Affiliations:**
+   - [ ] Check the candidate's CV/LinkedIn for actual employment history
+   - [ ] Look up the specific publication(s) from that institution
+   - [ ] Determine if it was employment vs. short-term visit/collaboration
+   - [ ] Contact the candidate if needed for clarification
+
+2. **For Indirect (Co-author) Affiliations:**
+   - [ ] Review the publication context (conference, journal)
+   - [ ] Assess if the collaboration is ongoing or one-time
+   - [ ] Consider the nature of the research relationship
+
+### Understanding Affiliation Years
+
+- **Multiple years (e.g., 2015-2024)**: Likely actual employment
+- **Single year (e.g., 2014)**: Could be just one paper/collaboration
+- **Recent single year**: More concerning than old single year
+
 ## Usage
 
 ```bash
@@ -268,7 +315,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Disclaimer
 
-This tool is provided for academic and research purposes only. The accuracy of the data depends on the completeness of the OpenAlex database. Always verify critical information manually. The authors are not responsible for decisions made based on this tool's output.
+⚠️ **IMPORTANT**: This tool is provided for **screening purposes only**. 
+
+- The accuracy of results depends entirely on OpenAlex database quality
+- **Direct affiliations may reflect collaborations, not actual employment**
+- A single-year affiliation often means just one collaborative paper
+- **Always verify flagged candidates manually before making any decisions**
+- The authors are not responsible for decisions made based on this tool's output
+
+**Do NOT use this tool as the sole basis for any personnel, hiring, or security decisions.**
 
 ## Acknowledgments
 
