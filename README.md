@@ -178,6 +178,25 @@ To prevent false positives, the following institution name patterns are automati
 
 This filter significantly reduces false positives while maintaining accuracy for legitimate academic institutions.
 
+### Author Name Verification
+
+The system also verifies that the OpenAlex author name matches the expected candidate name. This prevents false positives from **ID mismatches** where different authors with similar names get confused.
+
+**Example Issue:**
+- Input: "Liang Jiang" (quantum computing researcher at University of Chicago)
+- OpenAlex ID returns: "Hualiang Jiang" (medicinal chemistry researcher in China)
+- Result: **Name mismatch detected → Check skipped**
+
+When a mismatch is detected, the output shows:
+```
+[X/Y] Checking: Liang Jiang
+    OpenAlex ID: A5001392142
+    [WARNING] Name mismatch! Expected: 'Liang Jiang', Got: 'Hualiang Jiang'
+    [SKIP] Skipping affiliation check due to potential ID mismatch
+```
+
+The flag evidence column will show: `ID Mismatch: OpenAlex shows 'Hualiang Jiang'`
+
 ## Examples
 
 ### Interactive country selection

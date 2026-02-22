@@ -116,6 +116,125 @@ def is_generic_institution(institution_name: str) -> bool:
     
     return False
 
+
+def verify_author_name(
+    expected_first: str, 
+    expected_last: str, 
+    actual_name: str,
+    threshold: float = 0.5
+) -> bool:
+    """
+    Verify that the OpenAlex author name matches the expected name.
+    
+    This helps prevent false positives from ID mismatches where different
+    authors with similar names get confused.
+    
+    Args:
+        expected_first: Expected first name
+        expected_last: Expected last name
+        actual_name: Actual display name from OpenAlex
+        threshold: Minimum match ratio (0.0-1.0)
+        
+    Returns:
+        True if names match sufficiently, False otherwise
+    """
+    if not actual_name:
+        return False
+    
+    import re
+    
+    def normalize(name: str) -> str:
+        """Normalize name: lowercase, remove punctuation except hyphens."""
+        return re.sub(r'[^\w\s\-]', '', name.lower().strip())
+    
+    def get_name_variants(name: str) -> set:
+        """Get all reasonable variants of a name."""
+        name = normalize(name)
+        variants = {name}
+        
+        # Add version without hyphens (merged)
+        if '-' in name:
+            variants.add(name.replace('-', ''))
+        
+        # Add individual parts if hyphenated
+        if '-' in name:
+            for part in name.split('-'):
+                if len(part) > 1:
+                    variants.add(part)
+        
+        return variants
+    
+    expected_first = normalize(expected_first)
+    expected_last = normalize(expected_last)
+    actual_name_normalized = normalize(actual_name)
+    
+    # Split actual name into parts
+    actual_parts = set()
+    for part in actual_name_normalized.split():
+        actual_parts.add(part)
+        # Handle merged hyphenated names
+        if '-' in part:
+            actual_parts.add(part.replace('-', ''))
+            for subpart in part.split('-'):
+                if len(subpart) > 1:
+                    actual_parts.add(subpart)
+    
+    # Also add the full name without spaces for cases like "Liangjiang" vs "Liang Jiang"
+    actual_merged = actual_name_normalized.replace(' ', '').replace('-', '')
+    
+    # Get expected name variants
+    expected_first_variants = get_name_variants(expected_first)
+    expected_last_variants = get_name_variants(expected_last)
+    
+    # Check if last name matches (strict: must be a complete word/part)
+    last_name_match = False
+    for exp_last in expected_last_variants:
+        if exp_last in actual_parts:
+            last_name_match = True
+            break
+    
+    # Check if first name matches
+    first_name_match = False
+    for exp_first in expected_first_variants:
+        # Skip very short variants unless they're the only option
+        if len(exp_first) < 2 and len(expected_first_variants) > 1:
+            continue
+            
+        # Check full first name as complete word
+        if exp_first in actual_parts:
+            first_name_match = True
+            break
+            
+        # Check if first name is part of a merged name in actual
+        # e.g., "guang" in "guangcan"
+        for actual_part in actual_parts:
+            if len(exp_first) >= 3 and actual_part.startswith(exp_first):
+                first_name_match = True
+                break
+        
+        if first_name_match:
+            break
+    
+    # Check initials if first name doesn't match yet
+    if not first_name_match and len(expected_first) >= 1:
+        first_initial = expected_first[0]
+        for part in actual_parts:
+            # Match single-letter initials or 2-char initials like "M."
+            if len(part) <= 2 and part[0] == first_initial:
+                first_name_match = True
+                break
+            # Also check if actual name starts with expected first initial
+            if part[0] == first_initial and len(part) > len(expected_first) * 0.5:
+                first_name_match = True
+                break
+    
+    # Both must match for confirmation
+    # Exception: if expected first name is very short (1-2 chars), prioritize last name match
+    if len(expected_first.replace(' ', '')) <= 2 and last_name_match:
+        return True
+    
+    return last_name_match and first_name_match
+
 def interactive_country_selection() -> List[str]:
     """
     Display interactive menu for country selection.
@@ -549,12 +668,26 @@ def process_candidate(
     flag_evidence = ""
     
     # ========================================================================
+    # STEP 0: Verify Author Name Match
+    # ========================================================================
+    author_data = get_author_profile(openalex_id, headers)
+    time.sleep(api_delay)
+    
+    if author_data:
+        actual_name = author_data.get("display_name", "")
+        if not verify_author_name(first_name, last_name, actual_name):
+            print(f"    [WARNING] Name mismatch! Expected: '{first_name} {last_name}', Got: '{actual_name}'")
+            print(f"    [SKIP] Skipping affiliation check due to potential ID mismatch")
+            df.at[index, "Flag"] = "No"
+            df.at[index, "Affiliation_Type"] = "None"
+            df.at[index, "Flag_Evidence"] = f"ID Mismatch: OpenAlex shows '{actual_name}'"
+            return False
+        print(f"    OpenAlex Name: {actual_name} [VERIFIED]")
+    
+    # ========================================================================
     # STEP 1: Direct Affiliation Check
     # ========================================================================
     print("    [STEP 1] Checking direct affiliations...")
-    
-    author_data = get_author_profile(openalex_id, headers)
-    time.sleep(api_delay)
     
     if author_data:
         is_direct, direct_evidence = check_direct_affiliation(author_data, flagged_countries)
