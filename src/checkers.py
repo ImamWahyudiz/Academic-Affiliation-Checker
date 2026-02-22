@@ -46,6 +46,7 @@ def check_direct_affiliation(
             
         country_code = institution.get("country_code")
         inst_name = institution.get("display_name", "Unknown Institution")
+        inst_type = institution.get("type", "")
         
         # Skip generic institutions that may have incorrect country codes
         if is_generic_institution(inst_name):
@@ -53,14 +54,32 @@ def check_direct_affiliation(
         
         if country_code and country_code in flagged_countries:
             years = aff.get("years") or []
+            country_name = get_country_name(country_code)
+            
+            # Build detailed evidence
+            details = []
             
             if years and isinstance(years, list) and len(years) > 0:
-                year_str = f" ({min(years)}-{max(years)})"
-            else:
-                year_str = ""
-                
-            country_name = get_country_name(country_code)
-            evidence.append(f"{inst_name} [{country_name}]{year_str}")
+                year_range = f"{min(years)}-{max(years)}"
+                year_count = len(years)
+                if year_count == 1:
+                    details.append(f"1 year only ({years[0]})")
+                else:
+                    details.append(f"{year_count} years ({year_range})")
+            
+            if inst_type:
+                details.append(f"Type: {inst_type}")
+            
+            # Format evidence string (max ~150 chars)
+            ev = f"{inst_name} [{country_name}]"
+            if details:
+                detail_str = " | ".join(details)
+                if len(ev) + len(detail_str) < 150:
+                    ev = f"{ev} | {detail_str}"
+                else:
+                    ev = f"{ev} | {details[0]}"  # At least show years
+            
+            evidence.append(ev)
     
     # Check last_known_institutions (array)
     last_institutions = author_data.get("last_known_institutions") or []
@@ -77,8 +96,14 @@ def check_direct_affiliation(
         country_code = inst.get("country_code")
         if country_code and country_code in flagged_countries:
             country_name = get_country_name(country_code)
-            ev = f"{inst_name} [{country_name}] (Last Known)"
-            if ev not in evidence:
+            inst_type = inst.get("type", "")
+            
+            ev = f"{inst_name} [{country_name}] | CURRENT/RECENT"
+            if inst_type:
+                ev = f"{inst_name} [{country_name}] | CURRENT/RECENT | Type: {inst_type}"
+            
+            # Avoid duplicates
+            if not any(inst_name in e for e in evidence):
                 evidence.append(ev)
     
     # Fallback: check last_known_institution (singular/legacy field)
@@ -91,8 +116,8 @@ def check_direct_affiliation(
             country_code = last_inst.get("country_code")
             if country_code and country_code in flagged_countries:
                 country_name = get_country_name(country_code)
-                ev = f"{inst_name} [{country_name}] (Last Known)"
-                if ev not in evidence:
+                ev = f"{inst_name} [{country_name}] | CURRENT/RECENT"
+                if not any(inst_name in e for e in evidence):
                     evidence.append(ev)
     
     return len(evidence) > 0, evidence

@@ -86,9 +86,16 @@ OpenAlex builds affiliation data from publication metadata, which can be **inacc
 
 ```
 Willy Susilo (University of Wollongong, Australia)
-├── OpenAlex shows: "Sharif University of Technology [Iran] (2014)"
+├── OpenAlex shows: "Sharif University of Technology [Iran] | 1 year only (2014) | Type: education"
 ├── Reality: Likely a single collaborative paper, not employment
 └── Action needed: Verify if actual affiliation or just collaboration
+
+vs.
+
+Researcher with long-term affiliation:
+├── OpenAlex shows: "Tehran University [Iran] | 10 years (2010-2020) | Type: education"
+├── Reality: This indicates actual employment history
+└── Action: Higher concern, requires thorough verification
 ```
 
 ### Verification Checklist
@@ -191,19 +198,34 @@ Output is saved as **Excel (.xlsx)** with:
 |--------|-------------|
 | Flag | `Yes` or `No` |
 | Affiliation_Type | `Direct`, `Indirect (Co-author)`, or `None` |
-| Flag_Evidence | Details of flagged affiliations |
+| Flag_Evidence | Details of flagged affiliations (see format below) |
+
+**Evidence Format:**
+- **Direct**: `Institution [Country] | X years (YYYY-YYYY) | Type: education`
+- **Direct (Current)**: `Institution [Country] | CURRENT/RECENT | Type: education`
+- **Indirect**: `Co-author: Name at Institution [Country] (Year) | Paper: "Title"`
 
 ### Example Output
 
+**Direct Affiliation Found:**
 ```
-[25/50] Checking: John Doe
+[10/50] Checking: John Doe
     OpenAlex ID: A5012345678
+    [STEP 1] Checking direct affiliations...
+    [FLAG] DIRECT affiliation found!
+           - Tehran University [Iran] | 5 years (2015-2020) | Type: education
+```
+
+**Indirect Affiliation Found:**
+```
+[25/50] Checking: Jane Smith
+    OpenAlex ID: A5087654321
     [STEP 1] Checking direct affiliations...
     [OK] No direct affiliation found
     [STEP 2] Checking indirect affiliations (last 30 works)...
     Found 30 works to check
     [FLAG] INDIRECT affiliation found through co-authors!
-           - Co-author: Jane Smith at Tel Aviv University [Israel] (2024) | Paper: "Machine Learning for Cryptographic Systems"
+           - Co-author: Ali Hassan at Tel Aviv University [Israel] (2024) | Paper: "Machine Learning for Cryptographic Systems"
 ```
 
 ## False Positive Prevention
