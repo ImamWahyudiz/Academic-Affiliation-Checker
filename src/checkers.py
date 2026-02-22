@@ -126,6 +126,11 @@ def check_indirect_affiliation(
             
         authorships = work.get("authorships") or []
         pub_year = work.get("publication_year", "")
+        work_title = work.get("title", "")
+        
+        # Truncate title if too long
+        if work_title and len(work_title) > 80:
+            work_title = work_title[:77] + "..."
         
         for authorship in authorships:
             if not isinstance(authorship, dict):
@@ -167,7 +172,11 @@ def check_indirect_affiliation(
                         coauthor_name = author.get("display_name", "Unknown Co-author")
                         country_name = get_country_name(country_code)
                         
-                        ev = f"Co-author: {coauthor_name} at {inst_name} [{country_name}] ({pub_year})"
+                        # Include work title in evidence
+                        if work_title:
+                            ev = f"Co-author: {coauthor_name} at {inst_name} [{country_name}] ({pub_year}) | Paper: \"{work_title}\""
+                        else:
+                            ev = f"Co-author: {coauthor_name} at {inst_name} [{country_name}] ({pub_year})"
                         evidence.append(ev)
     
     return len(evidence) > 0, evidence

@@ -203,7 +203,7 @@ Output is saved as **Excel (.xlsx)** with:
     [STEP 2] Checking indirect affiliations (last 30 works)...
     Found 30 works to check
     [FLAG] INDIRECT affiliation found through co-authors!
-           - Co-author: Jane Smith at Tel Aviv University [Israel] (2024)
+           - Co-author: Jane Smith at Tel Aviv University [Israel] (2024) | Paper: "Machine Learning for Cryptographic Systems"
 ```
 
 ## False Positive Prevention
