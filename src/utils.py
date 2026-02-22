@@ -163,6 +163,35 @@ def _get_institution_keywords(name: str) -> Set[str]:
     return set(normalized.split())
 
 
+def _split_multi_institutions(institution_str: str) -> list:
+    """
+    Split a string containing multiple institutions into individual names.
+    
+    Handles various delimiters: , ; / | & and
+    
+    Args:
+        institution_str: Raw institution string (e.g., "MIT; Harvard, Stanford")
+        
+    Returns:
+        List of individual institution names
+    """
+    if not institution_str:
+        return []
+    
+    # Split by common delimiters: ; , / | &
+    # Also handle " and " as separator
+    parts = re.split(r'[;,/|&]|\s+and\s+', institution_str, flags=re.IGNORECASE)
+    
+    # Clean up each part
+    institutions = []
+    for part in parts:
+        cleaned = part.strip()
+        if cleaned and len(cleaned) > 1:
+            institutions.append(cleaned)
+    
+    return institutions if institutions else [institution_str]
+
+
 def verify_institution_match(
     expected_institution: str,
     author_data: Dict
@@ -170,8 +199,10 @@ def verify_institution_match(
     """
     Verify that the author's institution history contains the expected institution.
     
+    Handles multiple institutions separated by delimiters (,;/|& and)
+    
     Args:
-        expected_institution: Institution name from input data
+        expected_institution: Institution name(s) from input data
         author_data: Author profile from OpenAlex
         
     Returns:
@@ -180,11 +211,8 @@ def verify_institution_match(
     if not expected_institution or not author_data:
         return True, 0.0
     
-    expected_normalized = _normalize_institution(expected_institution)
-    expected_keywords = _get_institution_keywords(expected_institution)
-    
-    if not expected_keywords:
-        return True, 0.0
+    # Split into individual institutions if multiple are provided
+    expected_institutions = _split_multi_institutions(expected_institution)
     
     # Collect all institution names from author's history
     author_institutions = set()
@@ -205,30 +233,37 @@ def verify_institution_match(
             if inst_name:
                 author_institutions.add(inst_name)
     
-    # Check for matches
+    # Check for matches - return True if ANY expected institution matches
     best_score = 0.0
     
-    for inst_name in author_institutions:
-        inst_normalized = _normalize_institution(inst_name)
-        inst_keywords = _get_institution_keywords(inst_name)
+    for expected_single in expected_institutions:
+        expected_normalized = _normalize_institution(expected_single)
+        expected_keywords = _get_institution_keywords(expected_single)
         
-        # Check exact normalized match
-        if expected_normalized == inst_normalized:
-            return True, 1.0
-        
-        # Check if expected is contained in author's institution or vice versa
-        if expected_normalized in inst_normalized or inst_normalized in expected_normalized:
-            best_score = max(best_score, 0.9)
+        if not expected_keywords:
             continue
         
-        # Check keyword overlap (Jaccard similarity)
-        if expected_keywords and inst_keywords:
-            intersection = expected_keywords & inst_keywords
-            union = expected_keywords | inst_keywords
-            if union:
-                jaccard = len(intersection) / len(union)
-                if jaccard > 0.3:
-                    best_score = max(best_score, jaccard)
+        for inst_name in author_institutions:
+            inst_normalized = _normalize_institution(inst_name)
+            inst_keywords = _get_institution_keywords(inst_name)
+            
+            # Check exact normalized match
+            if expected_normalized == inst_normalized:
+                return True, 1.0
+            
+            # Check if expected is contained in author's institution or vice versa
+            if expected_normalized in inst_normalized or inst_normalized in expected_normalized:
+                best_score = max(best_score, 0.9)
+                continue
+            
+            # Check keyword overlap (Jaccard similarity)
+            if expected_keywords and inst_keywords:
+                intersection = expected_keywords & inst_keywords
+                union = expected_keywords | inst_keywords
+                if union:
+                    jaccard = len(intersection) / len(union)
+                    if jaccard > 0.3:
+                        best_score = max(best_score, jaccard)
     
     return best_score >= 0.3, best_score
 
